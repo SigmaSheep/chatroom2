@@ -13,7 +13,7 @@
 #include <iostream>
 #include <thread>
 #include <boost/asio.hpp>
-#include "chat_message.hpp"
+#include "../chat_message.hpp/chat_message.hpp"
 
 using boost::asio::ip::tcp;
 
@@ -23,9 +23,10 @@ class chat_client
 {
 public:
 	chat_client(boost::asio::io_context& io_context,
-		const tcp::resolver::results_type& endpoints)
+		const tcp::resolver::results_type& endpoints,
+		const bool reducer_flag)
 		: io_context_(io_context),
-		socket_(io_context)
+		socket_(io_context),reducer_flag_(reducer_flag)
 	{
 		do_connect(endpoints);
 	}
@@ -88,6 +89,10 @@ private:
 			if (!ec)
 			{
 				std::cout.write(read_msg_.body(), read_msg_.body_length());
+				std::string msg(read_msg_.body(), read_msg_.body_length());
+				if (msg == "AllMappingFinished"&&reducer_flag_) {
+					close();
+				}
 				std::cout << "\n";
 				do_read_header();
 			}
@@ -125,6 +130,7 @@ private:
 	tcp::socket socket_;
 	chat_message read_msg_;
 	chat_message_queue write_msgs_;
+	bool reducer_flag_;
 };
 
 int main()
@@ -134,12 +140,11 @@ int main()
 	tcp::resolver resolver(io_context);
 	tcp::resolver::query query("localhost", "6060");
 	auto endpoints = resolver.resolve(query);
-	chat_client c(io_context, endpoints);
+	chat_client c(io_context, endpoints,true);
 
 	std::thread t([&io_context]() { io_context.run(); });
-
+	/*
 	char line[chat_message::max_body_length + 1];
-	// map_process_done
 	while (std::cin.getline(line, chat_message::max_body_length + 1))
 	{
 		chat_message msg;
@@ -150,7 +155,9 @@ int main()
 	}
 
 	c.close();
+	*/
 	t.join();
-
+	std::cout << "reducer start \n";
+	std::cin.get();
 	return 0;
 }

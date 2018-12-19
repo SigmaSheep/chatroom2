@@ -18,7 +18,6 @@
 #include <boost/asio.hpp>
 #include "chat_message.hpp"
 
-using boost::asio::ip::tcp;
 
 //----------------------------------------------------------------------
 
@@ -43,8 +42,8 @@ public:
 	void join(chat_participant_ptr participant)
 	{
 		participants_.insert(participant);
-		for (auto msg : recent_msgs_)
-			participant->deliver(msg);
+		//for (auto msg : recent_msgs_)
+			//participant->deliver(msg);
 	}
 
 	void leave(chat_participant_ptr participant)
@@ -62,10 +61,29 @@ public:
 			participant->deliver(msg);
 	}
 
+	void SetMapperNumber(const int num) {
+		number_of_mapper_ = num;
+	}
+
+	void AddOneFinishedMapper() {
+		finished_mapper_++;
+		if (finished_mapper_ == number_of_mapper_) {
+			chat_message msg;
+			char line[25]="AllMappingFinished";
+			msg.body_length(std::strlen(line));
+			std::memcpy(msg.body(), line, msg.body_length());
+			msg.encode_header();
+			for (auto participant : participants_)
+				participant->deliver(msg);
+		}
+	}
+
 private:
 	std::set<chat_participant_ptr> participants_;
 	enum { max_recent_msgs = 100 };
 	chat_message_queue recent_msgs_;
+	int number_of_mapper_;
+	int finished_mapper_=0;
 };
 
 //----------------------------------------------------------------------
@@ -75,7 +93,7 @@ class chat_session
 	public std::enable_shared_from_this<chat_session>
 {
 public:
-	chat_session(tcp::socket socket, chat_room& room)
+	chat_session(boost::asio::ip::tcp::socket socket, chat_room& room)
 		: socket_(std::move(socket)),
 		room_(room)
 	{
@@ -125,6 +143,12 @@ private:
 		{
 			if (!ec)
 			{
+				std::string s(read_msg_.body(), read_msg_.body_length());
+				if(s == "map_process_done"){
+					room_.AddOneFinishedMapper();
+				}
+				std::cout.write(read_msg_.body(), read_msg_.body_length());
+				std::cout<<s<<"\n";
 				room_.deliver(read_msg_);
 				do_read_header();
 			}
@@ -158,7 +182,7 @@ private:
 		});
 	}
 
-	tcp::socket socket_;
+	boost::asio::ip::tcp::socket socket_;
 	chat_room& room_;
 	chat_message read_msg_;
 	chat_message_queue write_msgs_;
@@ -170,9 +194,11 @@ class chat_server
 {
 public:
 	chat_server(boost::asio::io_context& io_context,
-		const tcp::endpoint& endpoint)
+		const boost::asio::ip::tcp::endpoint& endpoint,
+		const int number_of_mapper)
 		: acceptor_(io_context, endpoint)
 	{
+		room_.SetMapperNumber(number_of_mapper);
 		do_accept();
 	}
 
@@ -180,7 +206,7 @@ private:
 	void do_accept()
 	{
 		acceptor_.async_accept(
-			[this](boost::system::error_code ec, tcp::socket socket)
+			[this](boost::system::error_code ec, boost::asio::ip::tcp::socket socket)
 		{
 			if (!ec)
 			{
@@ -191,7 +217,7 @@ private:
 		});
 	}
 
-	tcp::acceptor acceptor_;
+	boost::asio::ip::tcp::acceptor acceptor_;
 	chat_room room_;
 };
 
@@ -200,8 +226,9 @@ private:
 int main()
 {
 	boost::asio::io_context io_context;
-	tcp::endpoint endpoint(tcp::v4(), 6060);
-	chat_server servers(io_context, endpoint);
+	boost::asio::ip::tcp::endpoint endpoint(
+		boost::asio::ip::tcp::v4(), 6060);
+	chat_server servers(io_context, endpoint,4);
 	io_context.run();
 
 

@@ -13,9 +13,8 @@
 #include <iostream>
 #include <thread>
 #include <boost/asio.hpp>
-#include "chat_message.hpp"
+#include "../chat_message.hpp/chat_message.hpp"
 
-using boost::asio::ip::tcp;
 
 typedef std::deque<chat_message> chat_message_queue;
 
@@ -23,7 +22,7 @@ class chat_client
 {
 public:
 	chat_client(boost::asio::io_context& io_context,
-		const tcp::resolver::results_type& endpoints)
+		const boost::asio::ip::tcp::resolver::results_type& endpoints)
 		: io_context_(io_context),
 		socket_(io_context)
 	{
@@ -50,10 +49,10 @@ public:
 	}
 
 private:
-	void do_connect(const tcp::resolver::results_type& endpoints)
+	void do_connect(const boost::asio::ip::tcp::resolver::results_type& endpoints)
 	{
 		boost::asio::async_connect(socket_, endpoints,
-			[this](boost::system::error_code ec, tcp::endpoint)
+			[this](boost::system::error_code ec, boost::asio::ip::tcp::endpoint)
 		{
 			if (!ec)
 			{
@@ -122,7 +121,7 @@ private:
 
 private:
 	boost::asio::io_context& io_context_;
-	tcp::socket socket_;
+	boost::asio::ip::tcp::socket socket_;
 	chat_message read_msg_;
 	chat_message_queue write_msgs_;
 };
@@ -131,24 +130,24 @@ int main()
 {
 	boost::asio::io_context io_context;
 
-	tcp::resolver resolver(io_context);
-	tcp::resolver::query query("localhost", "6060");
+	boost::asio::ip::tcp::resolver resolver(io_context);
+	boost::asio::ip::tcp::resolver::query query("localhost", "6060");
 	auto endpoints = resolver.resolve(query);
 	chat_client c(io_context, endpoints);
 
 	std::thread t([&io_context]() { io_context.run(); });
-
-	char line[chat_message::max_body_length + 1];
-	// map_process_done
-	while (std::cin.getline(line, chat_message::max_body_length + 1))
+	char line1[chat_message::max_body_length + 1]= "map_process_done";
+	while (std::cin.getline(line1,100))
+	while (true)
 	{
 		chat_message msg;
+		char line[25] = "Mapping";
 		msg.body_length(std::strlen(line));
 		std::memcpy(msg.body(), line, msg.body_length());
 		msg.encode_header();
 		c.write(msg);
+		::Sleep(5000);
 	}
-
 	c.close();
 	t.join();
 
